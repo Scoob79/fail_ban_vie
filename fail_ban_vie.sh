@@ -56,7 +56,7 @@ Copier les deux lignes suivantes :
 "
 }
 
-API_Key="o.XwShYtgQ3h3QU7c1lOJ2kNFkz8n0uen4"
+API_Key="Votre clé API"
 
 ban () { # Cherche actuellement bannies par fail2ban et les rajoute dans iptables
 
