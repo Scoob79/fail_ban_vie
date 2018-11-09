@@ -38,10 +38,11 @@ Fonctionnement :
 une fois les deux scripts copier et mis en execution sur la machine il ne vous reste plus qu'a les ajouter
 dans la table cron de root.
 
-    ./fail_ban_vie.sh --ban     Surveille toutes les minutes les logs de fail2ban
-    ./fail_ban_vie.sh --banlog  Cherche toutes les ip dans /var/log/auth.log qui on tentées de se connecter en root et les rajoute dans iptables
-    ./fail_ban_vie.sh --iptable Cherche actuellement bannies par fail2ban et les rajoute dans iptables
-    ./fail_ban_vie.sh --geoloc  Affiche la base en y ajoutant la geolocalisation
+    ./fail_ban_vie.sh --ban         Surveille toutes les minutes les logs de fail2ban
+    ./fail_ban_vie.sh --banlog      Cherche toutes les ip dans /var/log/auth.log qui on tentées de se connecter en root et les rajoute dans iptables
+    ./fail_ban_vie.sh --iptable     Cherche actuellement bannies par fail2ban et les rajoute dans iptables
+    ./fail_ban_vie.sh --geoloc      Affiche la base en y ajoutant la geolocalisation
+    ./fail_ban_vie.sh --coh_base    Remet en cohérencela base par rapport à iptables
 
 En root :
 ---------
@@ -106,7 +107,7 @@ until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
     ip=$(echo $ip | cut -d ':' -f 1)
     integre=$(echo $ip | grep [a-zA-Z]) # Vérifie que la chaine IP ne contienne que des chiffres 
     if [ "$ip" != "" ] && [ "$integre" == "" ];then   # Si IP n'est pas égale à rien
-        ipt=$(/sbin/iptables -L INPUT -v -n | grep DROP | grep $ip) # Récupère la liste des IP bannies
+        ipt=$(/sbin/iptables -L INPUT -v -n | grep DROP | grep $ip) # Récupère la liste des IP bannies et ne contient que des chiffre et .
         if [ "$ipt" == "" ]; then /sbin/iptables -I INPUT -s $ip -j DROP; fi # Control que l'IP ne soit pas déjà bannie si non elle l'a rajoute
         base=$(cat /var/log/iptable_base | grep $ip) # Récupère la liste des IP bannies dans la base
         if [ "$base" == "" ]; then echo $ip >> /var/log/iptable_base; echo $ip;fi # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
@@ -169,9 +170,9 @@ done
 }
 
 geoloc () { # Affiche la base en y ajoutant la geolocalisation
-echo "===================================================================================================================================================================="
-printf "%-20s %-20s %-20s %-25s %-20s %-52s %-20s\n" "| IP" "| Ville" "| Code Postal" "| Province" "| Nombre d'attaque" "| Afficher la carte" "|"
-echo "===================================================================================================================================================================="
+echo "========================================================================================================================================================================================"
+printf "%-20s %-20s %-10s %-25s %-20s %-52s %-7s %-10s %-10s %-3s\n" "| IP" "| Ville" "| CP" "| Province" "| Nombre d'attaque" "| Afficher la carte" "| Etat" "| pkts" "| bits" "|"
+echo "========================================================================================================================================================================================"
 ip=1
 te=teste
 until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
@@ -184,17 +185,38 @@ until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
         # Geolocalise les adresse IP
         nb=$(echo $ip | cut -d ':' -f 2)
         ip=$(echo $ip | cut -d ':' -f 1)
-        vil=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 5 | sed "s/\ //" | sed "s/ò/o/; s/ê/e/; s/é/e/; s/è/e/" )
+        vil=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 5 | sed "s/\ //" | sed "s/ò/o/; s/ê/e/; s/é/e/; s/è/e/; s/ö/o/" )
         cp=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 6)
         cnt=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 4 | sed "s/\ //") 
-        
+        drop=$(iptables -L INPUT -v -n | grep DROP | grep "$ip")
+        if [ "$drop" != "" ]; then etat="DROP"; else etat="";fi
+        pkts=$(iptables -L INPUT -v -n | grep DROP | grep "$ip" | cut -d ' ' -f1-5 | sed 's/\ //g')
+        bits=$(iptables -L INPUT -v -n | grep DROP | grep "$ip" | cut -d ' ' -f6-10 | sed 's/DROP//g; s/\ //g')
         url=$(echo "http://trouver-ip.com/index.php?ip=$ip")
         
-        printf "%-20s %-20s %-20s %-25s %-20s %-52s %-3s\n" "| $ip" "| $vil" "| $cp" "| $cnt" "| $nb" "| $url" "|"
+        printf "%-20s %-20s %-10s %-25s %-20s %-52s %-7s %-10s %-10s %-3s\n" "| $ip" "| $vil" "| $cp" "| $cnt" "| $nb" "| $url" "| $etat" "| $pkts" "| $bits" "|"
     fi
 done
-echo "===================================================================================================================================================================="
+echo "========================================================================================================================================================================================"
 echo "$numero IP enregistrées et bannies"
+}
+
+base () { # Remet en cohérence la base et iptables
+ip_iptable=$(iptables -L INPUT -v -n | grep DROP | cut -d ' ' -f30-38 | sed 's/\ //g') # Récupère les IP bloquées dans iptables
+ip=1
+numero=0
+until [[ -z "$ip" ]] # Tant que IP n'est pas égale à rien
+    do
+    let "numero = numero +1"
+    ip=$(echo "$ip_iptable" | cut -d '
+' -f $numero) # Détermine l'IP suivante
+    if [ "$ip" != "" ]; then   # Si IP n'est pas égale à rien et ne contient que des chiffre et .
+        compare=$(grep "$ip" /var/log/iptable_base)
+        if [ "$compare" == "" ]; then echo $ip >> /var/log/iptable_base; echo $ip;fi # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
+    fi
+done
+
+iptable
 }
 
 if [ -f /var/log/iptable_base ]; then test; else touch /var/log/iptable_base; fi # Si la base n'existe pas il l'a crée
@@ -203,3 +225,4 @@ if [ "$1" == "--ban" ]; then ban; exit 0; fi
 if [ "$1" == "--banlog" ]; then ban_log; exit 0; fi
 if [ "$1" == "--iptable" ]; then iptable; exit 0; fi
 if [ "$1" == "--geoloc" ]; then geoloc; exit 0; fi
+if [ "$1" == "--coh_base" ]; then base; exit 0; fi
