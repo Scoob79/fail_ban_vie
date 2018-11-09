@@ -56,7 +56,7 @@ Copier les deux lignes suivantes :
 "
 }
 
-API_Key="Votre clé API"
+API_Key="o.XwShYtgQ3h3QU7c1lOJ2kNFkz8n0uen4"
 
 ban () { # Cherche actuellement bannies par fail2ban et les rajoute dans iptables
 
@@ -73,7 +73,7 @@ until [[ -z "$ips" ]]    # Tant que IP n'est pas égale à rien
         if [ "$ipt" == "" ]; then # Control que l'IP ne soit pas déjà bannie si non elle l'a rajoute
             /sbin/iptables -I INPUT -s $ips -j DROP
             echo $ips
-            vil=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ips | cut -d ',' -f 5 | sed "s/\ //" | sed "s/ò/o/; s/ê/e/" )
+            vil=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ips | cut -d ',' -f 5 | sed "s/\ //" | sed "s/ò/o/; s/ê/e/; s/ä/a/g" )
             cp=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ips | cut -d ',' -f 6)
             cnt=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ips | cut -d ',' -f 4 | sed "s/\ //") 
             url=$(echo "http://trouver-ip.com/index.php?ip=$ips")
@@ -85,7 +85,13 @@ Pays : $cnt
 URL : $url" "scoob79mobile@gmail.com"
         fi
         base=$(cat /var/log/iptable_base | grep $ips) # Récupère la liste des IP bannies dans la base
-        if [ "$base" == "" ]; then echo $ips >> /var/log/iptable_base; fi # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
+        if [ "$base" == "" ]; then # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
+            ret1=$(cat /var/log/auth.log |  grep --binary-files=text "Failed password for invalid user" | grep "$ips"  | wc -l)
+            ret2=$(cat /var/log/auth.log |  grep --binary-files=text "Failed password for root from" | grep "$ips"  | wc -l)
+            if [ "$ret1" -gt 0 ]; then echo $ips":$ret1" >> /var/log/iptable_base; fi
+            if [ "$ret2" -gt 0 ]; then echo $ips":$ret2" >> /var/log/iptable_base; fi
+            
+        fi 
     fi
 done
 }
@@ -110,13 +116,20 @@ done
 
 ban_log () { # Cherche toutes les ip dans /var/log/auth.log qui on tentées de se connecter en root et les rajoute dans iptables
 ip=1
+I=0
+BCDIR=$(which bc)
+CUTDIR=$(which cut)
 until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
     do 
     numero=$(($numero + 1)) # Incrémente le numéro de colonne pour la prochaine IP
-    
-   ip=$(cat /var/log/auth.log | grep "Failed password for root from" | cut -d ' ' -f 12 | cut -d '
-' -f $numero) # Recherche la liste de toutes les IP dont une tentative de connaxion en root a été effectuée
     rech="Failed password for root from"
+    ip=$(cat /var/log/auth.log | grep "$rech" | cut -d ' ' -f 12 | cut -d '
+' -f $numero) # Recherche la liste de toutes les IP dont une tentative de connaxion en root a été effectuée
+    
+    NBLIGNE=`cat /var/log/auth.log | grep "$rech" | cut -d ' ' -f1 | wc -l`
+    PROGRESS=`"$BCDIR" -l <<< "($I/$NBLIGNE)*100" | $CUTDIR -d"." -f1`
+    echo -ne "Progression : $PROGRESS%\r"
+    let "I=$I+1"
     
     integre=$(echo $ip | grep [a-zA-Z]) # Vérifie que la chaine IP ne contienne que des chiffres 
     if [ "$ip" != "" ] && [ "$integre" == "" ];then   # Si IP n'est pas égale à rien
@@ -124,16 +137,24 @@ until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
         if [ "$ipt" == "" ]; then /sbin/iptables -I INPUT -s $ip -j DROP;  echo $ip; fi # Control que l'IP ne soit pas déjà bannie si non elle l'a rajoute
         base=$(cat /var/log/iptable_base | grep $ip) # Récupère la liste des IP bannies dans la base
         if [ "$base" == "" ]; then 
-            echo $ip":"$(cat /var/log/auth.log |  grep "Failed password for root from" | grep "$ip"  | wc -l) >> /var/log/iptable_base  
+            echo $ip":"$(cat /var/log/auth.log |  grep --binary-files=text "$rech" | grep "$ip"  | wc -l) >> /var/log/iptable_base  
         fi # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
+
     fi
 done
-    
+
+I=0
+
 until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
     do 
-    ip=$(cat /var/log/auth.log | grep "Failed password for invalid user" | cut -d ' ' -f 12 | cut -d '
-' -f $numero) # Recherche la liste de toutes les IP dont une tentative de connaxion en root a été effectuée
     rech="Failed password for invalid user"
+    ip=$(cat /var/log/auth.log | grep "$rech" | cut -d ' ' -f 12 | cut -d '
+' -f $numero) # Recherche la liste de toutes les IP dont une tentative de connaxion en root a été effectuée
+    
+    NBLIGNE=`cat /var/log/auth.log | grep "$rech" | cut -d ' ' -f1 | wc -l`
+    PROGRESS=`"$BCDIR" -l <<< "($I/$NBLIGNE)*100" | $CUTDIR -d"." -f1`
+    echo -ne "Progression : $PROGRESS%\r"
+    let "I=$I+1"
     
     integre=$(echo $ip | grep [a-zA-Z]) # Vérifie que la chaine IP ne contienne que des chiffres 
     if [ "$ip" != "" ] && [ "$integre" == "" ];then   # Si IP n'est pas égale à rien
@@ -141,16 +162,16 @@ until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
         if [ "$ipt" == "" ]; then /sbin/iptables -I INPUT -s $ip -j DROP;  echo $ip; fi # Control que l'IP ne soit pas déjà bannie si non elle l'a rajoute
         base=$(cat /var/log/iptable_base | grep $ip) # Récupère la liste des IP bannies dans la base
         if [ "$base" == "" ]; then 
-            echo $ip":"$(cat /var/log/auth.log |  grep "Failed password for root from" | grep "$ip"  | wc -l) >> /var/log/iptable_base  
+            echo $ip":"$(cat /var/log/auth.log |  grep --binary-files=text "$rech" | grep "$ip"  | wc -l) >> /var/log/iptable_base  
         fi # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
     fi
 done
 }
 
 geoloc () { # Affiche la base en y ajoutant la geolocalisation
-echo "==============================================================================================================================================================="
-printf "%-20s %-20s %-20s %-20s %-20s %-52s %-20s\n" "| IP" "| Ville" "| Code Postal" "| Pays" "| Nombre d'attaque" "| Afficher la carte" "|"
-echo "==============================================================================================================================================================="
+echo "===================================================================================================================================================================="
+printf "%-20s %-20s %-20s %-25s %-20s %-52s %-20s\n" "| IP" "| Ville" "| Code Postal" "| Province" "| Nombre d'attaque" "| Afficher la carte" "|"
+echo "===================================================================================================================================================================="
 ip=1
 te=teste
 until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
@@ -163,17 +184,17 @@ until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
         # Geolocalise les adresse IP
         nb=$(echo $ip | cut -d ':' -f 2)
         ip=$(echo $ip | cut -d ':' -f 1)
-        vil=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 5 | sed "s/\ //" | sed "s/ò/o/; s/ê/e/" )
+        vil=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 5 | sed "s/\ //" | sed "s/ò/o/; s/ê/e/; s/é/e/; s/è/e/" )
         cp=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 6)
         cnt=$(geoiplookup -f /usr/share/GeoIP/GeoLiteCity.dat $ip | cut -d ',' -f 4 | sed "s/\ //") 
         
         url=$(echo "http://trouver-ip.com/index.php?ip=$ip")
         
-        printf "%-20s %-20s %-20s %-20s %-20s %-52s %-3s\n" "| $ip" "| $vil" "| $cp" "| $cnt" "| $nb" "| $url" "|"
+        printf "%-20s %-20s %-20s %-25s %-20s %-52s %-3s\n" "| $ip" "| $vil" "| $cp" "| $cnt" "| $nb" "| $url" "|"
     fi
 done
-echo "==============================================================================================================================================================="
-
+echo "===================================================================================================================================================================="
+echo "$numero IP enregistrées et bannies"
 }
 
 if [ -f /var/log/iptable_base ]; then test; else touch /var/log/iptable_base; fi # Si la base n'existe pas il l'a crée
