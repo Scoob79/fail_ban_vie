@@ -20,7 +20,9 @@ dans la table cron de root.
     ./fail_ban_vie.sh --iptable   Cherche actuellement bannies par fail2ban et les rajoute dans iptables
     ./fail_ban_vie.sh --geoloc    Affiche la base en y ajoutant la geolocalisation
     ./fail_ban_vie.sh --coh_base  Remet en cohérencela base par rapport à iptables
-
+    ./fail_ban_vie.sh --config      Permet de créer ou de modifier le fichier de configuration du script
+    ./fail_ban_vie.sh --github      Met à jour le fichier liste sur le dépot github
+    
 ### En root :
 
 crontab -e
