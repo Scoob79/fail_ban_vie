@@ -169,7 +169,7 @@ init2
 ##############################################DECLARATION DES VARIABLES##########################################
 #################################################################################################################
 
-if [ -f ./config ]; then test; else init; fi # Si le fichier de configuration n'existe pas il passe en configuration
+if [ -f $(pwd)/config ]; then test; else init; fi # Si le fichier de configuration n'existe pas il passe en configuration
 
 # Récupère les paramètre dans le fichier de configuration et initialise les variables
 # PUSHBULLET (https://github.com/Scoob79/Pushbullet) <================================================================================================================
@@ -270,10 +270,10 @@ until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
         ipt=$(/sbin/iptables -L INPUT -v -n | grep DROP | grep $ip) # Récupère la liste des IP bannies
         if [ "$ipt" == "" ]; then /sbin/iptables -I INPUT -s $ip -j DROP; fi # Control que l'IP ne soit pas déjà bannie si non elle l'a rajoute
         base=$(cat /var/log/iptable_base | grep $ip) # Récupère la liste des IP bannies dans la base
-        if [ "$base" == "" ]; then 
+        if [ "$base" == "" ]; then # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
             echo $ip":"$(cat /var/log/auth.log |  grep --binary-files=text "$rech" | grep "$ip"  | wc -l) >> /var/log/iptable_base  
             maj=y
-        fi # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
+        fi 
     fi
 done
 
@@ -295,10 +295,10 @@ until [[ -z "$ip" ]]    # Tant que IP n'est pas égale à rien
         ipt=$(/sbin/iptables -L INPUT -v -n | grep DROP | grep $ip) # Récupère la liste des IP bannies
         if [ "$ipt" == "" ]; then /sbin/iptables -I INPUT -s $ip -j DROP; fi # Control que l'IP ne soit pas déjà bannie si non elle l'a rajoute
         base=$(cat /var/log/iptable_base | grep $ip) # Récupère la liste des IP bannies dans la base
-        if [ "$base" == "" ]; then 
+        if [ "$base" == "" ]; then # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
             echo $ip":"$(cat /var/log/auth.log |  grep --binary-files=text "$rech" | grep "$ip"  | wc -l) >> /var/log/iptable_base 
             maj=y
-        fi # Control que l'IP ne soit pas déjà dans la base si non elle l'a rajoute
+        fi 
     fi
 done
 if [ "$maj" == "y" ]; then github; fi
@@ -357,7 +357,22 @@ done
 github () { # Diffusion sur github des résultats de la géolocalisation lors du bannissement d'une nouvelle IP
 if [ "$github" == "y" ]; then
     git clone $adresse_github  > /dev/nul 2>&1 # Récupération du GIT
-    ./fail_ban_vie.sh --geoloc > ./$depot_github/liste # Mise à jour de la liste
+    ./fail_ban_vie.sh --geoloc > ./$depot_github/liste_ip # Mise à jour de la liste
+    
+    a=1
+    until [[ -z "$a" ]]; 
+    do
+        numero=$(($numero + 1))
+        a=$(cat /var/log/auth.log | grep "Failed password for invalid user" | cut -d '
+' -f $numero)
+        b=${a##*user}
+        if [ "${b%from*}" != " " ]; then 
+            if [ -z "$(echo ./$depot_github/liste_user | grep "${b%from*}")" ]; then 
+                echo ${b%from*} >> ./$depot_github/liste_user
+            fi
+        fi 
+    done
+
     echo $(date) >> $depot_github/liste   # Rajout de la date
     cd Attaque-SSH
     git add --all .  > /dev/nul 2>&1
